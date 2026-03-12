@@ -1,0 +1,4 @@
+flask>=2.0
+requests>=2.28
+python-dotenv>=0.19
+flask-limiter>=3.0
