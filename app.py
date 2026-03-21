@@ -401,9 +401,9 @@ DOWNLOAD_PAGE_TEMPLATE = """
                     progressEl.style.width = (states[data.status] || 10) + '%';
                 }
             } catch (e) { console.error(e); }
-            setTimeout(checkStatus, 3000);
+            setTimeout(checkStatus, 2000);
         }
-        checkStatus();
+        setTimeout(checkStatus, 2500);
     </script>
 </body>
 </html>
@@ -623,23 +623,23 @@ def serve_movie():
 
     lock = get_lock(imdb_id)
     with lock:
-        if imdb_id in STATUS and STATUS[imdb_id] in ("downloading", "queued"):
+        if imdb_id in STATUS and STATUS[imdb_id] in ("downloading", "queued", "done"):
             pass
         else:
             torrent_url = get_yts_torrent(imdb_id)
             if not torrent_url:
                 abort(404, description="Movie not found on YTS.")
+            STATUS[imdb_id] = "queued"
             thread = threading.Thread(
                 target=download_worker, args=(imdb_id, torrent_url), daemon=True
             )
             thread.start()
             log_info(f"🚀 Started background download for {imdb_id}")
-            STATUS[imdb_id] = "queued"
 
     return render_template_string(
         DOWNLOAD_PAGE_TEMPLATE,
         imdb_id=imdb_id,
-        status=STATUS.get(imdb_id, "starting..."),
+        status=STATUS.get(imdb_id, "queued"),
     )
 
 

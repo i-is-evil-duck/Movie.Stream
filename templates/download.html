@@ -142,20 +142,10 @@
             } catch (e) {
                 console.error(e);
             }
-            setTimeout(checkStatus, 3000);
+            setTimeout(checkStatus, 2000);
         }
         
-        function showError(message) {
-            const container = document.getElementById('container');
-            const template = document.getElementById('errorTemplate');
-            const clone = template.content.cloneNode(true);
-            clone.getElementById('errorMessage').textContent = message;
-            clone.getElementById('errorMovieId').textContent = imdbId;
-            container.innerHTML = '';
-            container.appendChild(clone);
-        }
-        
-        checkStatus();
+        setTimeout(checkStatus, 2500);
     </script>
 </body>
 </html>
