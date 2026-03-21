@@ -4,12 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>IMDb Top 250 Movies</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             background: #0a0a0f;
             color: #e5e5e5;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
             min-height: 100vh;
         }
         .header {
@@ -90,15 +91,6 @@
             font-weight: 600;
             margin-bottom: 24px;
             color: #fff;
-        }
-        .error-banner {
-            background: rgba(244, 67, 54, 0.2);
-            border: 1px solid rgba(244, 67, 54, 0.5);
-            color: #f44336;
-            padding: 16px 24px;
-            border-radius: 12px;
-            margin-bottom: 24px;
-            text-align: center;
         }
         .movies-grid {
             display: grid;
@@ -245,9 +237,6 @@
     </div>
     <div class="container">
         <h2 class="section-title">Top Rated Movies of All Time</h2>
-        {% if error %}
-        <div class="error-banner">{{ error }}</div>
-        {% endif %}
         <div class="loading" id="loading">
             <div class="loading-spinner"></div>
             <span class="loading-text">Loading movies...</span>

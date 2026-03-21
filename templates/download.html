@@ -4,12 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Downloading... | Movie.Stream</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             background: #0a0a0f;
             color: #e5e5e5;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
             min-height: 100vh;
             display: flex;
             flex-direction: column;
@@ -89,20 +90,6 @@
         <a href="/" class="back-link">← Back to Movie List</a>
     </div>
     
-    <template id="errorTemplate">
-        <svg class="icon error" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"/>
-            <path d="M15 9l-6 6M9 9l6 6"/>
-        </svg>
-        <h1>Download Failed</h1>
-        <div class="error-box">
-            <h2>Error</h2>
-            <p id="errorMessage">The download failed. Please try again.</p>
-        </div>
-        <div class="movie-id" id="errorMovieId"></div>
-        <a href="/" class="back-link">← Back to Movie List</a>
-    </template>
-
     <script>
         const imdbId = '{{ imdb_id }}';
         let isDone = false;
@@ -131,12 +118,13 @@
                     statusEl.classList.add('done');
                     spinnerEl.style.display = 'none';
                     progressEl.style.width = '100%';
-                    window.location.href = '/?id=' + imdbId;
+                    window.location.href = '/player?id=' + imdbId;
                     return;
                 } else if (status.startsWith('error')) {
                     isDone = true;
                     spinnerEl.style.display = 'none';
-                    showError(status.replace('error: ', ''));
+                    statusEl.textContent = 'Download failed';
+                    statusEl.classList.add('error');
                     return;
                 }
             } catch (e) {

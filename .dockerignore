@@ -1,10 +1,9 @@
-__pycache__
-*.pyc
-*.pyo
-.env
+.git
+.gitignore
 media
 tmp
 logs
-.git
-.gitignore
-README.md
+old.broken.Movie.Stream
+*.pyc
+__pycache__
+.env
