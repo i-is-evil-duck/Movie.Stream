@@ -2,16 +2,15 @@ import os
 import logging
 import threading
 import urllib.parse
+import time
+import shutil
+import subprocess
+import requests
 from functools import wraps
-from flask import Flask, request, send_file, abort, render_template_string
+from flask import Flask, request, send_file, abort, render_template, jsonify
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from dotenv import load_dotenv
-import requests
-import shutil
-import subprocess
-import time
-import math
 
 load_dotenv()
 
@@ -20,12 +19,29 @@ app = Flask(__name__)
 MEDIA_DIR = os.getenv("MEDIA_DIR", "media")
 TMP_DIR = os.getenv("TMP_DIR", "tmp")
 LOG_DIR = os.getenv("LOG_DIR", "logs")
-YTS_API_URL = os.getenv("YTS_API_URL", "https://yts.mx/api/v2")
+YTS_API_URL = os.getenv("YTS_API_URL", "https://movies-api.accel.li/api/v2")
 DOWNLOAD_RETRY_ATTEMPTS = int(os.getenv("DOWNLOAD_RETRY_ATTEMPTS", "3"))
 DOWNLOAD_RETRY_BACKOFF = int(os.getenv("DOWNLOAD_RETRY_BACKOFF", "2"))
 MAX_CONNECTION_PER_SERVER = int(os.getenv("MAX_CONNECTION_PER_SERVER", "5"))
 RATE_LIMIT_REQUESTS = int(os.getenv("RATE_LIMIT_REQUESTS", "10"))
 RATE_LIMIT_WINDOW = int(os.getenv("RATE_LIMIT_WINDOW", "60"))
+MOVIES_CACHE_TTL = int(os.getenv("MOVIES_CACHE_TTL", "21600"))
+TOP_250_URL = (
+    "https://raw.githubusercontent.com/theapache64/top250/master/top250_min.json"
+)
+
+MOVIES_CACHE = {"data": None, "timestamp": 0}
+
+TRACKERS = [
+    "udp://glotorrents.pw:6969/announce",
+    "udp://tracker.opentrackr.org:1337/announce",
+    "udp://torrent.gresille.org:80/announce",
+    "udp://tracker.openbittorrent.com:80",
+    "udp://tracker.coppersurfer.tk:6969",
+    "udp://tracker.leechers-paradise.org:6969",
+    "udp://p4p.arenabg.ch:1337",
+    "udp://tracker.internetwarriors.net:1331",
+]
 
 os.makedirs(MEDIA_DIR, exist_ok=True)
 os.makedirs(TMP_DIR, exist_ok=True)
@@ -65,18 +81,6 @@ def log_error(msg):
     logger.error(msg)
 
 
-TRACKERS = [
-    "udp://glotorrents.pw:6969/announce",
-    "udp://tracker.opentrackr.org:1337/announce",
-    "udp://torrent.gresille.org:80/announce",
-    "udp://tracker.openbittorrent.com:80",
-    "udp://tracker.coppersurfer.tk:6969",
-    "udp://tracker.leechers-paradise.org:6969",
-    "udp://p4p.arenabg.ch:1337",
-    "udp://tracker.internetwarriors.net:1331",
-]
-
-
 def get_yts_torrent(imdb_id):
     try:
         url = f"{YTS_API_URL}/movie_details.json?imdb_id={imdb_id}"
@@ -110,6 +114,45 @@ def get_yts_torrent(imdb_id):
         return None
 
 
+def get_top_movies(force_refresh=False):
+    current_time = time.time()
+    if (
+        not force_refresh
+        and MOVIES_CACHE["data"]
+        and (current_time - MOVIES_CACHE["timestamp"]) < MOVIES_CACHE_TTL
+    ):
+        return MOVIES_CACHE["data"]
+
+    try:
+        r = requests.get(TOP_250_URL, timeout=15)
+        r.raise_for_status()
+        movies = r.json()
+        processed = []
+        for i, m in enumerate(movies):
+            imdb_url = m.get("imdb_url", "")
+            imdb_id = imdb_url.replace("/title/", "").rstrip("/") if imdb_url else None
+            if imdb_id and imdb_id.startswith("tt"):
+                processed.append(
+                    {
+                        "rank": i + 1,
+                        "imdb_id": imdb_id,
+                        "title": m.get("name", "Unknown"),
+                        "year": m.get("year", ""),
+                        "rating": m.get("rating", 0),
+                        "poster": m.get("thumb_url", ""),
+                        "genres": m.get("genre", []),
+                        "description": m.get("desc", ""),
+                    }
+                )
+        MOVIES_CACHE["data"] = processed
+        MOVIES_CACHE["timestamp"] = current_time
+        log_info(f"Loaded {len(processed)} movies from IMDb Top 250")
+        return processed
+    except requests.RequestException as e:
+        log_error(f"Request error fetching top movies: {e}")
+        return MOVIES_CACHE["data"] or []
+
+
 def download_torrent(url, dest_dir, attempt=1):
     os.makedirs(dest_dir, exist_ok=True)
     cmd = [
@@ -122,7 +165,7 @@ def download_torrent(url, dest_dir, attempt=1):
         "--console-log-level=warn",
         url,
     ]
-    log_info(f"⬇️  Starting aria2c (attempt {attempt}): {url}")
+    log_info(f"Starting aria2c (attempt {attempt}): {url[:50]}...")
     result = subprocess.run(cmd)
     if result.returncode != 0:
         log_error(f"aria2c failed with code {result.returncode}")
@@ -140,7 +183,7 @@ def download_torrent_with_retry(
             return True
         if attempt < max_attempts:
             wait_time = backoff_base ** (attempt - 1)
-            log_info(f"⬇️  Retrying in {wait_time}s...")
+            log_info(f"Retrying in {wait_time}s...")
             time.sleep(wait_time)
     return False
 
@@ -161,7 +204,7 @@ def move_media(imdb_id, source_dir):
         new_path = os.path.join(dest_dir, f"{imdb_id}{ext}")
         shutil.move(movie_file, new_path)
         shutil.rmtree(source_dir, ignore_errors=True)
-        log_info(f"✅ Moved movie to: {new_path}")
+        log_info(f"Moved movie to: {new_path}")
         return new_path
     shutil.rmtree(source_dir, ignore_errors=True)
     return None
@@ -175,78 +218,99 @@ def download_worker(imdb_id, torrent_url):
             final_path = move_media(imdb_id, temp_dir)
             if final_path and os.path.exists(final_path):
                 STATUS[imdb_id] = "done"
-                log_info(f"✅ Download complete: {imdb_id}")
+                log_info(f"Download complete: {imdb_id}")
             else:
                 STATUS[imdb_id] = "error: media not found"
-                log_error(f"❌ Media not found after download: {imdb_id}")
+                log_error(f"Media not found after download: {imdb_id}")
         else:
             STATUS[imdb_id] = "error: torrent failed"
-            log_error(f"❌ Download failed after retries: {imdb_id}")
+            log_error(f"Download failed after retries: {imdb_id}")
     except Exception as e:
         STATUS[imdb_id] = f"error: {e}"
-        log_error(f"❌ Exception in download_worker: {e}")
+        log_error(f"Exception in download_worker: {e}")
+
+
+def is_valid_imdb_id(imdb_id):
+    if not imdb_id:
+        return False
+    if not imdb_id.startswith("tt"):
+        return False
+    if not imdb_id[2:].isdigit():
+        return False
+    if not (7 <= len(imdb_id[2:]) <= 9):
+        return False
+    return True
 
 
 @app.route("/")
-@limiter.limit(f"{RATE_LIMIT_REQUESTS} per {RATE_LIMIT_WINDOW} second")
-def serve_movie():
+def index():
     imdb_id = request.args.get("id")
-    if (
-        not imdb_id
-        or not imdb_id.startswith("tt")
-        or not imdb_id[2:].isdigit()
-        or not (7 <= len(imdb_id[2:]) <= 9)
-    ):
-        abort(
-            400,
-            description="Invalid IMDb ID format. Expected 'tt' followed by 7–9 digits.",
+
+    if imdb_id and is_valid_imdb_id(imdb_id):
+        media_path_mp4 = os.path.join(MEDIA_DIR, imdb_id, f"{imdb_id}.mp4")
+        media_path_mkv = os.path.join(MEDIA_DIR, imdb_id, f"{imdb_id}.mkv")
+        media_path = (
+            media_path_mp4 if os.path.exists(media_path_mp4) else media_path_mkv
         )
+
+        if os.path.exists(media_path):
+            return render_template("player.html", imdb_id=imdb_id, movie_title=imdb_id)
+
+        lock = get_lock(imdb_id)
+        with lock:
+            if imdb_id in STATUS and STATUS[imdb_id] in (
+                "downloading",
+                "queued",
+                "done",
+            ):
+                pass
+            else:
+                torrent_url = get_yts_torrent(imdb_id)
+                if not torrent_url:
+                    return render_template("download.html", imdb_id=imdb_id)
+                STATUS[imdb_id] = "queued"
+                thread = threading.Thread(
+                    target=download_worker, args=(imdb_id, torrent_url), daemon=True
+                )
+                thread.start()
+                log_info(f"Started background download for {imdb_id}")
+
+        return render_template("download.html", imdb_id=imdb_id)
+
+    return render_template("index.html")
+
+
+@app.route("/player")
+def player():
+    imdb_id = request.args.get("id")
+    if not imdb_id or not is_valid_imdb_id(imdb_id):
+        abort(400, description="Invalid IMDb ID")
 
     media_path_mp4 = os.path.join(MEDIA_DIR, imdb_id, f"{imdb_id}.mp4")
     media_path_mkv = os.path.join(MEDIA_DIR, imdb_id, f"{imdb_id}.mkv")
     media_path = media_path_mp4 if os.path.exists(media_path_mp4) else media_path_mkv
 
-    if os.path.exists(media_path):
-        log_info(f"📺 Serving {media_path}")
-        return send_file(media_path, mimetype="video/mp4")
+    if not os.path.exists(media_path):
+        return render_template("download.html", imdb_id=imdb_id)
 
-    lock = get_lock(imdb_id)
-    with lock:
-        if imdb_id in STATUS and STATUS[imdb_id] in ("downloading", "queued"):
-            pass
-        else:
-            torrent_url = get_yts_torrent(imdb_id)
-            if not torrent_url:
-                abort(404, description="Movie not found on YTS.")
-            thread = threading.Thread(
-                target=download_worker, args=(imdb_id, torrent_url), daemon=True
-            )
-            thread.start()
-            log_info(f"🚀 Started background download for {imdb_id}")
-            STATUS[imdb_id] = "queued"
+    return render_template("player.html", imdb_id=imdb_id, movie_title=imdb_id)
 
-    return render_template_string(
-        """
-        <h1>Downloading {{ imdb_id }}...</h1>
-        <p>Status: {{ status }}</p>
-        <p>please wait.</p>
-        <script>
-            async function checkStatus() {
-                const res = await fetch('/status?id={{ imdb_id }}');
-                const data = await res.json();
-                if (data.status === 'done') {
-                    location.reload();
-                } else {
-                    document.querySelector('p:nth-of-type(1)').textContent = 'Status: ' + data.status;
-                    setTimeout(checkStatus, 5000);
-                }
-            }
-            checkStatus();
-        </script>
-    """,
-        imdb_id=imdb_id,
-        status=STATUS.get(imdb_id, "starting..."),
-    )
+
+@app.route("/watch")
+def watch():
+    imdb_id = request.args.get("id")
+    if not imdb_id or not is_valid_imdb_id(imdb_id):
+        abort(400, description="Invalid IMDb ID")
+
+    media_path_mp4 = os.path.join(MEDIA_DIR, imdb_id, f"{imdb_id}.mp4")
+    media_path_mkv = os.path.join(MEDIA_DIR, imdb_id, f"{imdb_id}.mkv")
+    media_path = media_path_mp4 if os.path.exists(media_path_mp4) else media_path_mkv
+
+    if not os.path.exists(media_path):
+        abort(404, description="Movie not found")
+
+    log_info(f"Serving {media_path}")
+    return send_file(media_path, mimetype="video/mp4")
 
 
 @app.route("/status")
@@ -257,6 +321,14 @@ def check_status():
         abort(400, description="Missing IMDb ID.")
     status = STATUS.get(imdb_id, "not found")
     return {"id": imdb_id, "status": status}
+
+
+@app.route("/api/movies")
+@limiter.limit(f"{RATE_LIMIT_REQUESTS} per {RATE_LIMIT_WINDOW} second")
+def api_movies():
+    force = request.args.get("refresh", "").lower() == "true"
+    movies = get_top_movies(force_refresh=force)
+    return jsonify({"movies": movies, "count": len(movies)})
 
 
 @app.route("/health")
@@ -296,5 +368,5 @@ def health_check():
 if __name__ == "__main__":
     host = os.getenv("HOST", "0.0.0.0")
     port = int(os.getenv("PORT", "8973"))
-    log_info(f"🚀 Server starting on http://{host}:{port}")
+    log_info(f"Server starting on http://{host}:{port}")
     app.run(host=host, port=port, threaded=True)

@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IMDb Top 250 Movies</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #0a0a0f;
+            color: #e5e5e5;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            min-height: 100vh;
+        }
+        .header {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: linear-gradient(to bottom, #0a0a0f 0%, #0a0a0f 80%, transparent 100%);
+            padding: 20px 40px 40px;
+        }
+        .header-content {
+            max-width: 1600px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .logo svg { width: 40px; height: 40px; }
+        .logo h1 {
+            font-size: 28px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #f5c518 0%, #ffc107 50%, #ff9800 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .search-container {
+            position: relative;
+            width: 100%;
+            max-width: 400px;
+        }
+        .search-input {
+            width: 100%;
+            padding: 12px 20px 12px 45px;
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            color: #fff;
+            font-size: 15px;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+        .search-input:focus {
+            background: rgba(255,255,255,0.12);
+            border-color: rgba(245, 197, 24, 0.5);
+            box-shadow: 0 0 20px rgba(245, 197, 24, 0.15);
+        }
+        .search-input::placeholder { color: rgba(255,255,255,0.4); }
+        .search-icon {
+            position: absolute;
+            left: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: rgba(255,255,255,0.4);
+        }
+        .search-hint {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 11px;
+            color: rgba(255,255,255,0.3);
+            pointer-events: none;
+        }
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 0 40px 60px;
+        }
+        .section-title {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 24px;
+            color: #fff;
+        }
+        .movies-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 24px;
+        }
+        @media (min-width: 1600px) { .movies-grid { grid-template-columns: repeat(6, 1fr); } }
+        @media (max-width: 768px) {
+            .movies-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px; }
+            .container { padding: 0 20px 40px; }
+            .header { padding: 15px 20px 30px; }
+            .header-content { justify-content: center; }
+        }
+        .movie-card {
+            position: relative;
+            border-radius: 12px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            background: #16161d;
+        }
+        .movie-card:hover {
+            transform: scale(1.08) translateY(-8px);
+            z-index: 10;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.6), 0 0 60px rgba(245, 197, 24, 0.1);
+        }
+        .movie-poster {
+            aspect-ratio: 2/3;
+            width: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        .movie-overlay {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(to top, rgba(0,0,0,0.95) 0%, transparent 50%);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            padding: 20px 15px 15px;
+        }
+        .movie-card:hover .movie-overlay { opacity: 1; }
+        .movie-rank {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.85);
+            color: #f5c518;
+            font-weight: 700;
+            font-size: 14px;
+            padding: 4px 10px;
+            border-radius: 6px;
+            z-index: 5;
+        }
+        .movie-info { color: #fff; }
+        .movie-title {
+            font-size: 15px;
+            font-weight: 600;
+            line-height: 1.3;
+            margin-bottom: 6px;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        .movie-meta {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 13px;
+            color: rgba(255,255,255,0.7);
+        }
+        .movie-rating {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            color: #f5c518;
+            font-weight: 500;
+        }
+        .movie-rating svg { width: 14px; height: 14px; fill: currentColor; }
+        .movie-genres {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 10px;
+        }
+        .genre-tag {
+            background: rgba(255,255,255,0.15);
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            color: rgba(255,255,255,0.8);
+        }
+        .download-hint {
+            margin-top: 12px;
+            background: linear-gradient(135deg, #f5c518, #ff9800);
+            color: #000;
+            font-weight: 600;
+            font-size: 13px;
+            padding: 8px 16px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .hidden { display: none !important; }
+        .loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 60vh;
+            gap: 16px;
+        }
+        .loading-spinner {
+            width: 48px;
+            height: 48px;
+            border: 3px solid rgba(255,255,255,0.1);
+            border-top-color: #f5c518;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        .loading-text { color: rgba(255,255,255,0.5); }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-content">
+            <div class="logo">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#f5c518" stroke-width="2">
+                    <path d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"/>
+                </svg>
+                <h1>IMDb Top 250</h1>
+            </div>
+            <div class="search-container">
+                <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+                </svg>
+                <input type="text" class="search-input" id="searchInput" placeholder="Search movies or enter IMDb ID (e.g., tt0032138)...">
+                <span class="search-hint">Press Enter</span>
+            </div>
+        </div>
+    </div>
+    <div class="container">
+        <h2 class="section-title">Top Rated Movies of All Time</h2>
+        <div class="loading" id="loading">
+            <div class="loading-spinner"></div>
+            <span class="loading-text">Loading movies...</span>
+        </div>
+        <div class="movies-grid hidden" id="moviesGrid"></div>
+    </div>
+    <script>
+        const searchInput = document.getElementById('searchInput');
+        const moviesGrid = document.getElementById('moviesGrid');
+        const loadingEl = document.getElementById('loading');
+        let searchTimeout = null;
+        
+        function isValidImdbId(text) {
+            return /^tt\d{7,9}$/i.test(text.trim());
+        }
+        
+        function handleSearch(query) {
+            query = query.trim().toLowerCase();
+            
+            if (!query) {
+                document.querySelectorAll('.movie-card').forEach(card => card.classList.remove('hidden'));
+                return;
+            }
+            
+            if (isValidImdbId(query)) {
+                window.location.href = '/?id=' + query;
+                return;
+            }
+            
+            document.querySelectorAll('.movie-card').forEach(card => {
+                const title = card.dataset.title;
+                card.classList.toggle('hidden', !title.includes(query));
+            });
+        }
+        
+        searchInput.addEventListener('input', (e) => {
+            clearTimeout(searchTimeout);
+            const query = e.target.value;
+            
+            if (isValidImdbId(query.trim())) {
+                searchInput.nextElementSibling.textContent = 'Enter ↵';
+                searchInput.nextElementSibling.style.color = '#f5c518';
+            } else {
+                searchInput.nextElementSibling.textContent = 'Press Enter';
+                searchInput.nextElementSibling.style.color = 'rgba(255,255,255,0.3)';
+                
+                searchTimeout = setTimeout(() => {
+                    handleSearch(query);
+                }, 300);
+            }
+        });
+        
+        searchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                clearTimeout(searchTimeout);
+                handleSearch(e.target.value);
+            }
+        });
+        
+        async function loadMovies() {
+            try {
+                const res = await fetch('/api/movies');
+                if (!res.ok) throw new Error('Failed to load movies');
+                const data = await res.json();
+                renderMovies(data.movies);
+                loadingEl.classList.add('hidden');
+                moviesGrid.classList.remove('hidden');
+            } catch (e) {
+                console.error('Failed to load movies:', e);
+                loadingEl.innerHTML = '<span class="loading-text">Failed to load movies. <a href="/" style="color: #f5c518;">Retry</a></span>';
+            }
+        }
+        
+        function renderMovies(movies) {
+            moviesGrid.innerHTML = movies.map(movie => `
+                <div class="movie-card" data-imdb="${movie.imdb_id}" data-title="${movie.title.toLowerCase()}" onclick="window.location.href='/?id=${movie.imdb_id}'">
+                    <span class="movie-rank">#${movie.rank}</span>
+                    <img class="movie-poster" src="${movie.poster}" alt="${movie.title}" loading="lazy" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 150%22><rect fill=%22%2316161d%22 width=%22100%22 height=%22150%22/><text x=%2250%22 y=%2275%22 text-anchor=%22middle%22 fill=%22%23666%22 font-size=%2212%22>No Image</text></svg>'">
+                    <div class="movie-overlay">
+                        <div class="movie-info">
+                            <div class="movie-title">${movie.title}</div>
+                            <div class="movie-meta">
+                                <span>${movie.year}</span>
+                                <span class="movie-rating">
+                                    <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                                    ${movie.rating}
+                                </span>
+                            </div>
+                            <div class="movie-genres">
+                                ${movie.genres.slice(0, 3).map(g => `<span class="genre-tag">${g}</span>`).join('')}
+                            </div>
+                            <div class="download-hint">Click to Download</div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        loadMovies();
+    </script>
+</body>
+</html>
