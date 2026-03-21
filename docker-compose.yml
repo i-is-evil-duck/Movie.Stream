@@ -1,0 +1,31 @@
+services:
+  movie-stream:
+    build: .
+    container_name: movie-stream
+    ports:
+      - "8973:8973"
+    volumes:
+      - ./media:/app/media
+      - ./tmp:/app/tmp
+      - ./logs:/app/logs
+    environment:
+      - DEBUG=false
+      - HOST=0.0.0.0
+      - PORT=8973
+      - MEDIA_DIR=media
+      - TMP_DIR=tmp
+      - LOG_DIR=logs
+      - DOWNLOAD_RETRY_ATTEMPTS=3
+      - DOWNLOAD_RETRY_BACKOFF=2
+      - MAX_CONNECTION_PER_SERVER=5
+      - RATE_LIMIT_REQUESTS=10
+      - RATE_LIMIT_WINDOW=60
+      - MOVIES_CACHE_TTL=21600
+      - YTS_API_URL=https://movies-api.accel.li/api/v2
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8973/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s

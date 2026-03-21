@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Downloading... | Movie.Stream</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #0a0a0f;
+            color: #e5e5e5;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 20px;
+        }
+        .container {
+            text-align: center;
+            max-width: 500px;
+        }
+        .icon {
+            width: 80px;
+            height: 80px;
+            margin-bottom: 30px;
+        }
+        .icon.error { color: #f44336; }
+        .icon.downloading { animation: pulse 2s ease-in-out infinite; }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 0.8; }
+            50% { transform: scale(1.1); opacity: 1; }
+        }
+        h1 { font-size: 24px; font-weight: 600; margin-bottom: 12px; color: #fff; }
+        .status { font-size: 18px; color: #f5c518; margin-bottom: 8px; min-height: 28px; }
+        .movie-id { font-size: 14px; color: rgba(255,255,255,0.5); margin-bottom: 30px; font-family: monospace; }
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+        .progress { height: 100%; background: linear-gradient(90deg, #f5c518, #ff9800); width: 0%; transition: width 0.5s ease; border-radius: 3px; }
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(255,255,255,0.1);
+            border-top-color: #f5c518;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .back-link {
+            display: inline-block;
+            margin-top: 20px;
+            color: rgba(255,255,255,0.6);
+            text-decoration: none;
+            font-size: 14px;
+            transition: color 0.2s;
+        }
+        .back-link:hover { color: #f5c518; }
+        .done { color: #4caf50 !important; }
+        .error { color: #f44336 !important; }
+        .error-box {
+            background: rgba(244, 67, 54, 0.15);
+            border: 1px solid rgba(244, 67, 54, 0.4);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+        }
+        .error-box h2 { color: #f44336; margin-bottom: 8px; font-size: 20px; }
+        .error-box p { color: rgba(255,255,255,0.7); font-size: 14px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        {% if error %}
+        <svg class="icon error" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M15 9l-6 6M9 9l6 6"/>
+        </svg>
+        <h1>Download Failed</h1>
+        <div class="error-box">
+            <h2>Movie Not Found</h2>
+            <p>{{ error|e }}. The movie may not be available on YTS.</p>
+        </div>
+        <div class="movie-id">{{ imdb_id }}</div>
+        <a href="/" class="back-link">← Back to Movie List</a>
+        {% else %}
+        <svg class="icon downloading" viewBox="0 0 24 24" fill="none" stroke="#f5c518" stroke-width="2">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+        </svg>
+        <h1>Downloading Movie</h1>
+        <div class="status" id="status">Starting...</div>
+        <div class="movie-id">{{ imdb_id }}</div>
+        <div class="progress-bar"><div class="progress" id="progress"></div></div>
+        <div class="spinner" id="spinner"></div>
+        <a href="/" class="back-link">← Back to Movie List</a>
+        {% endif %}
+    </div>
+    <script>
+        {% if not error %}
+        const imdbId = '{{ imdb_id }}';
+        const statusEl = document.getElementById('status');
+        const movieIdEl = document.querySelector('.movie-id');
+        const progressEl = document.getElementById('progress');
+        const spinnerEl = document.getElementById('spinner');
+        
+        async function checkStatus() {
+            try {
+                const res = await fetch('/status?id=' + imdbId);
+                if (!res.ok) throw new Error('Status check failed');
+                const data = await res.json();
+                const status = data.status || 'unknown';
+                statusEl.textContent = status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, ' ');
+                
+                if (status === 'done') {
+                    statusEl.classList.add('done');
+                    spinnerEl.style.display = 'none';
+                    progressEl.style.width = '100%';
+                    window.location.href = '/?id=' + imdbId;
+                } else if (status.startsWith('error')) {
+                    spinnerEl.style.display = 'none';
+                    statusEl.classList.add('error');
+                    document.querySelector('.icon').classList.remove('downloading');
+                    document.querySelector('.icon').classList.add('error');
+                    document.querySelector('.icon').setAttribute('stroke', '#f44336');
+                    document.querySelector('.progress-bar').style.display = 'none';
+                    movieIdEl.innerHTML = `${imdbId}<br><a href="/" style="color: #f5c518; margin-top: 10px; display: inline-block;">← Back to list</a>`;
+                } else {
+                    const states = {'queued': 20, 'downloading': 50};
+                    progressEl.style.width = (states[status] || 10) + '%';
+                }
+            } catch (e) {
+                console.error(e);
+            }
+            setTimeout(checkStatus, 3000);
+        }
+        checkStatus();
+        {% endif %}
+    </script>
+</body>
+</html>
