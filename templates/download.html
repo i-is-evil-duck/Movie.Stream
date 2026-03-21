@@ -77,71 +77,85 @@
     </style>
 </head>
 <body>
-    <div class="container">
-        {% if error %}
+    <div class="container" id="container">
+        <svg class="icon downloading" viewBox="0 0 24 24" fill="none" stroke="#f5c518" stroke-width="2">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+        </svg>
+        <h1>Downloading Movie</h1>
+        <div class="status" id="status">Please wait...</div>
+        <div class="movie-id" id="movieId">{{ imdb_id }}</div>
+        <div class="progress-bar"><div class="progress" id="progress"></div></div>
+        <div class="spinner" id="spinner"></div>
+        <a href="/" class="back-link">← Back to Movie List</a>
+    </div>
+    
+    <template id="errorTemplate">
         <svg class="icon error" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="10"/>
             <path d="M15 9l-6 6M9 9l6 6"/>
         </svg>
         <h1>Download Failed</h1>
         <div class="error-box">
-            <h2>Movie Not Found</h2>
-            <p>{{ error|e }}. The movie may not be available on YTS.</p>
+            <h2>Error</h2>
+            <p id="errorMessage">The download failed. Please try again.</p>
         </div>
-        <div class="movie-id">{{ imdb_id }}</div>
+        <div class="movie-id" id="errorMovieId"></div>
         <a href="/" class="back-link">← Back to Movie List</a>
-        {% else %}
-        <svg class="icon downloading" viewBox="0 0 24 24" fill="none" stroke="#f5c518" stroke-width="2">
-            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
-        </svg>
-        <h1>Downloading Movie</h1>
-        <div class="status" id="status">Starting...</div>
-        <div class="movie-id">{{ imdb_id }}</div>
-        <div class="progress-bar"><div class="progress" id="progress"></div></div>
-        <div class="spinner" id="spinner"></div>
-        <a href="/" class="back-link">← Back to Movie List</a>
-        {% endif %}
-    </div>
+    </template>
+
     <script>
-        {% if not error %}
         const imdbId = '{{ imdb_id }}';
-        const statusEl = document.getElementById('status');
-        const movieIdEl = document.querySelector('.movie-id');
-        const progressEl = document.getElementById('progress');
-        const spinnerEl = document.getElementById('spinner');
+        let isDone = false;
         
         async function checkStatus() {
+            if (isDone) return;
+            
             try {
                 const res = await fetch('/status?id=' + imdbId);
                 if (!res.ok) throw new Error('Status check failed');
                 const data = await res.json();
                 const status = data.status || 'unknown';
-                statusEl.textContent = status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, ' ');
+                const statusEl = document.getElementById('status');
+                const progressEl = document.getElementById('progress');
+                const spinnerEl = document.getElementById('spinner');
                 
-                if (status === 'done') {
+                if (status === 'not found' || status === 'queued') {
+                    statusEl.textContent = 'Please wait, starting download...';
+                    progressEl.style.width = '10%';
+                } else if (status === 'downloading') {
+                    statusEl.textContent = 'Downloading...';
+                    progressEl.style.width = '50%';
+                } else if (status === 'done') {
+                    isDone = true;
+                    statusEl.textContent = 'Done! Loading video...';
                     statusEl.classList.add('done');
                     spinnerEl.style.display = 'none';
                     progressEl.style.width = '100%';
                     window.location.href = '/?id=' + imdbId;
+                    return;
                 } else if (status.startsWith('error')) {
+                    isDone = true;
                     spinnerEl.style.display = 'none';
-                    statusEl.classList.add('error');
-                    document.querySelector('.icon').classList.remove('downloading');
-                    document.querySelector('.icon').classList.add('error');
-                    document.querySelector('.icon').setAttribute('stroke', '#f44336');
-                    document.querySelector('.progress-bar').style.display = 'none';
-                    movieIdEl.innerHTML = `${imdbId}<br><a href="/" style="color: #f5c518; margin-top: 10px; display: inline-block;">← Back to list</a>`;
-                } else {
-                    const states = {'queued': 20, 'downloading': 50};
-                    progressEl.style.width = (states[status] || 10) + '%';
+                    showError(status.replace('error: ', ''));
+                    return;
                 }
             } catch (e) {
                 console.error(e);
             }
             setTimeout(checkStatus, 3000);
         }
+        
+        function showError(message) {
+            const container = document.getElementById('container');
+            const template = document.getElementById('errorTemplate');
+            const clone = template.content.cloneNode(true);
+            clone.getElementById('errorMessage').textContent = message;
+            clone.getElementById('errorMovieId').textContent = imdbId;
+            container.innerHTML = '';
+            container.appendChild(clone);
+        }
+        
         checkStatus();
-        {% endif %}
     </script>
 </body>
 </html>

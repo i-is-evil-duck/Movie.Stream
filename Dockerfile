@@ -1,11 +1,13 @@
-# Use Alpine Linux for small image size
-FROM python:3.10-alpine
+# Use an official Python runtime as the base image
+FROM python:3.10-slim
 
 # Set environment variables to prevent Python from buffering output
 ENV PYTHONUNBUFFERED=1
 
-# Install system dependencies (aria2 for torrents, wget for healthcheck)
-RUN apk add --no-cache aria2 wget
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    aria2 \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Set the working directory in the container
 WORKDIR /app
@@ -14,10 +16,7 @@ WORKDIR /app
 COPY . .
 
 # Install Python dependencies
-RUN pip install --no-cache-dir flask requests flask-limiter python-dotenv gunicorn
-
-# Create necessary directories
-RUN mkdir -p media tmp logs
+RUN pip install --no-cache-dir flask requests gunicorn
 
 # Expose the port your app runs on
 EXPOSE 8973
