@@ -1,6 +1,7 @@
 import os
 import logging
 import threading
+import urllib.parse
 from functools import wraps
 from flask import Flask, request, send_file, abort, render_template_string
 from flask_limiter import Limiter
@@ -64,23 +65,43 @@ def log_error(msg):
     logger.error(msg)
 
 
+TRACKERS = [
+    "udp://glotorrents.pw:6969/announce",
+    "udp://tracker.opentrackr.org:1337/announce",
+    "udp://torrent.gresille.org:80/announce",
+    "udp://tracker.openbittorrent.com:80",
+    "udp://tracker.coppersurfer.tk:6969",
+    "udp://tracker.leechers-paradise.org:6969",
+    "udp://p4p.arenabg.ch:1337",
+    "udp://tracker.internetwarriors.net:1331",
+]
+
+
 def get_yts_torrent(imdb_id):
     try:
-        url = f"{YTS_API_URL}/list_movies.json?query_term={imdb_id}"
+        url = f"{YTS_API_URL}/movie_details.json?imdb_id={imdb_id}"
         r = requests.get(url, timeout=10)
         r.raise_for_status()
         data = r.json()
-        movies = data.get("data", {}).get("movies", [])
-        if not movies:
+        movie_data = data.get("data", {}).get("movie", {})
+        if not movie_data:
             return None
-        torrents = movies[0].get("torrents", [])
+        torrents = movie_data.get("torrents", [])
+        if not torrents:
+            return None
 
         def torrent_sort_key(t):
             quality_order = {"1080p": 2, "720p": 1}
-            return (-quality_order.get(t["quality"], 0), t["type"] != "web")
+            return (-quality_order.get(t.get("quality", ""), 0), t.get("type") != "web")
 
         torrents.sort(key=torrent_sort_key)
-        return torrents[0]["url"]
+        torrent = torrents[0]
+        hash_str = torrent.get("hash", "")
+        title = movie_data.get("title_long", movie_data.get("title", "movie"))
+        dn = urllib.parse.quote(title)
+        trackers = "&tr=".join(TRACKERS)
+        magnet = f"magnet:?xt=urn:btih:{hash_str}&dn={dn}&tr={trackers}"
+        return magnet
     except requests.RequestException as e:
         log_error(f"Request error fetching torrent: {e}")
         return None

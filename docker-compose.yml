@@ -1,0 +1,22 @@
+services:
+  movie-stream:
+    build: .
+    container_name: movie-stream
+    restart: unless-stopped
+    ports:
+      - "8973:8973"
+    volumes:
+      - ./media:/app/media
+      - ./tmp:/app/tmp
+      - ./logs:/app/logs
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8973/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s

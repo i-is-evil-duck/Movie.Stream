@@ -16,7 +16,7 @@ WORKDIR /app
 COPY . .
 
 # Install Python dependencies
-RUN pip install --no-cache-dir flask requests gunicorn
+RUN pip install --no-cache-dir -r requirements.txt gunicorn
 
 # Expose the port your app runs on
 EXPOSE 8973
