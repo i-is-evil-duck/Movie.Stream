@@ -6,5 +6,4 @@ logs
 old.broken.Movie.Stream
 *.pyc
 __pycache__
-*.md
 .env

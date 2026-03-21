@@ -155,8 +155,13 @@ def get_top_movies(force_refresh=False):
 
 def download_torrent(url, dest_dir, attempt=1):
     os.makedirs(dest_dir, exist_ok=True)
+
+    import shutil as _shutil
+
+    aria2_path = _shutil.which("aria2c") or "aria2c"
+
     cmd = [
-        "aria2c",
+        aria2_path,
         "--dir",
         dest_dir,
         "--seed-time=0",
@@ -168,7 +173,7 @@ def download_torrent(url, dest_dir, attempt=1):
     log_info(f"Starting aria2c (attempt {attempt}): {url[:50]}...")
     result = subprocess.run(cmd)
     if result.returncode != 0:
-        log_error(f"aria2c failed with code {result.returncode}")
+        log_error(f"aria2c failed with code {result.returncode}: {result.stderr}")
     return result.returncode == 0
 
 
