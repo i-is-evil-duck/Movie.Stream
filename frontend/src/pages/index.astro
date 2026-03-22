@@ -1,0 +1,169 @@
+---
+import Layout from '../layouts/layout.astro';
+---
+
+<Layout title="IMDb Top 250 Movies">
+    <div class="header">
+        <div class="header-content">
+            <div class="logo">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#f5c518" stroke-width="2">
+                    <path d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"/>
+                </svg>
+                <h1>IMDb Top 250</h1>
+            </div>
+            <div class="search-container">
+                <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+                </svg>
+                <input type="text" class="search-input" id="searchInput" placeholder="Search movies or enter IMDb ID...">
+                <span class="search-hint">Press Enter</span>
+            </div>
+        </div>
+    </div>
+    <div class="container">
+        <h2 class="section-title">Top Rated Movies of All Time</h2>
+        <div class="loading" id="loading">
+            <div class="loading-spinner"></div>
+            <span class="loading-text">Loading movies...</span>
+        </div>
+        <div class="movies-grid hidden" id="moviesGrid"></div>
+    </div>
+</Layout>
+
+<style>
+    /* Put all the specific CSS from your old index.html here */
+    .header { position: sticky; top: 0; z-index: 100; background: linear-gradient(to bottom, #0a0a0f 0%, #0a0a0f 80%, transparent 100%); padding: 20px 40px 40px; }
+    .header-content { max-width: 1600px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 20px; }
+    .logo { display: flex; align-items: center; gap: 12px; }
+    .logo svg { width: 40px; height: 40px; }
+    .logo h1 { font-size: 28px; font-weight: 700; background: linear-gradient(135deg, #f5c518 0%, #ffc107 50%, #ff9800 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .search-container { position: relative; width: 100%; max-width: 400px; }
+    .search-input { width: 100%; padding: 12px 20px 12px 45px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; color: #fff; font-size: 15px; outline: none; transition: all 0.3s ease; }
+    .search-input:focus { background: rgba(255,255,255,0.12); border-color: rgba(245, 197, 24, 0.5); box-shadow: 0 0 20px rgba(245, 197, 24, 0.15); }
+    .search-icon { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: rgba(255,255,255,0.4); }
+    .search-hint { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-size: 11px; color: rgba(255,255,255,0.3); pointer-events: none; }
+    .container { max-width: 1600px; margin: 0 auto; padding: 0 40px 60px; }
+    .section-title { font-size: 24px; font-weight: 600; margin-bottom: 24px; color: #fff; }
+    .movies-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 24px; }
+    
+    /* Movie Card Styles */
+    :global(.movie-card) { position: relative; border-radius: 12px; overflow: hidden; cursor: pointer; transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); background: #16161d; }
+    :global(.movie-card:hover) { transform: scale(1.08) translateY(-8px); z-index: 10; box-shadow: 0 20px 40px rgba(0,0,0,0.6), 0 0 60px rgba(245, 197, 24, 0.1); }
+    :global(.movie-poster) { aspect-ratio: 2/3; width: 100%; object-fit: cover; display: block; }
+    :global(.movie-overlay) { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,0.95) 0%, transparent 50%); opacity: 0; transition: opacity 0.3s ease; display: flex; flex-direction: column; justify-content: flex-end; padding: 20px 15px 15px; }
+    :global(.movie-card:hover .movie-overlay) { opacity: 1; }
+    :global(.movie-rank) { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.85); color: #f5c518; font-weight: 700; font-size: 14px; padding: 4px 10px; border-radius: 6px; z-index: 5; }
+    :global(.movie-title) { color:#fff; font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+    :global(.movie-meta) { display: flex; gap: 10px; font-size: 13px; color: rgba(255,255,255,0.7); }
+    :global(.movie-rating) { color: #f5c518; }
+    :global(.genre-tag) { background: rgba(255,255,255,0.15); padding: 3px 8px; border-radius: 4px; font-size: 11px; color: #fff; margin-right: 5px; }
+    
+    .loading { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; gap: 16px; }
+    .loading-spinner { width: 48px; height: 48px; border: 3px solid rgba(255,255,255,0.1); border-top-color: #f5c518; border-radius: 50%; animation: spin 1s linear infinite; }
+    .loading-text { color: rgba(255,255,255,0.5); }
+    @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+
+<script>
+    const searchInput = document.getElementById('searchInput') as HTMLInputElement | null;
+    const moviesGrid = document.getElementById('moviesGrid');
+    const loadingEl = document.getElementById('loading');
+    
+    // Explicitly define this as a Timeout timer
+    let searchTimeout: ReturnType<typeof setTimeout> | undefined;
+    
+    // Add type 'string' to parameters
+    function isValidImdbId(text: string) {
+        return /^tt\d{7,9}$/i.test(text.trim());
+    }
+    
+    function handleSearch(query: string) {
+        query = query.trim().toLowerCase();
+        
+        if (!query) {
+            document.querySelectorAll('.movie-card').forEach(card => card.classList.remove('hidden'));
+            return;
+        }
+        
+        if (isValidImdbId(query)) {
+            window.location.href = `/download?id=${query}`;
+            return;
+        }
+        
+        document.querySelectorAll('.movie-card').forEach(card => {
+            // Prove to TypeScript this is an HTML element with a dataset
+            if (card instanceof HTMLElement && card.dataset.title) {
+                const title = card.dataset.title;
+                card.classList.toggle('hidden', !title.includes(query));
+            }
+        });
+    }
+    
+    if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            clearTimeout(searchTimeout);
+            const target = e.target as HTMLInputElement;
+            const query = target.value;
+            
+            if (isValidImdbId(query.trim())) {
+                if (searchInput.nextElementSibling) {
+                    searchInput.nextElementSibling.textContent = 'Enter ↵';
+                    (searchInput.nextElementSibling as HTMLElement).style.color = '#f5c518';
+                }
+            } else {
+                if (searchInput.nextElementSibling) {
+                    searchInput.nextElementSibling.textContent = 'Press Enter';
+                    (searchInput.nextElementSibling as HTMLElement).style.color = 'rgba(255,255,255,0.3)';
+                }
+                searchTimeout = setTimeout(() => {
+                    handleSearch(query);
+                }, 300);
+            }
+        });
+
+        searchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                clearTimeout(searchTimeout);
+                const target = e.target as HTMLInputElement;
+                handleSearch(target.value);
+            }
+        });
+    }
+    
+    async function loadMovies() {
+        if (!loadingEl || !moviesGrid) return;
+        
+        try {
+            const res = await fetch('/api/movies');
+            const data = await res.json();
+            
+            // Add 'any' and 'string' types to the mapping functions
+            moviesGrid.innerHTML = data.movies.map((movie: any) => `
+                <div class="movie-card" data-imdb="${movie.imdb_id}" data-title="${movie.title.toLowerCase()}" onclick="window.location.href='/download?id=${movie.imdb_id}'">
+                    <span class="movie-rank">#${movie.rank}</span>
+                    <img class="movie-poster" src="${movie.poster}" alt="${movie.title}" loading="lazy">
+                    <div class="movie-overlay">
+                        <div class="movie-info">
+                            <div class="movie-title">${movie.title}</div>
+                            <div class="movie-meta">
+                                <span>${movie.year}</span>
+                                <span class="movie-rating">★ ${movie.rating}</span>
+                            </div>
+                            <div style="margin-top: 10px;">
+                                ${movie.genres.slice(0, 3).map((g: string) => `<span class="genre-tag">${g}</span>`).join('')}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+            
+            loadingEl.classList.add('hidden');
+            moviesGrid.classList.remove('hidden');
+        } catch (e) {
+            console.error('Failed to load movies:', e);
+            loadingEl.innerHTML = '<span class="loading-text">Failed to load movies. Retry</span>';
+        }
+    }
+    
+    loadMovies();
+</script>

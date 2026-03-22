@@ -1,0 +1,81 @@
+---
+import Layout from '../layouts/layout.astro';
+---
+
+<Layout title="Playing Movie | Movie.Stream">
+    <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
+
+    <a href="/" class="back-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M19 12H5M12 19l-7-7 7-7"/>
+        </svg>
+        Back to Movies
+    </a>
+    
+    <div class="video-container">
+        <video id="player" playsinline controls>
+            Your browser does not support the video tag.
+        </video>
+    </div>
+</Layout>
+
+<style>
+    /* Remove all margins and scrolling */
+    body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
+    
+    .back-btn { 
+        position: absolute; top: 20px; left: 20px; z-index: 50; 
+        background: rgba(0, 0, 0, 0.5); color: #fff; 
+        border: 1px solid rgba(255, 255, 255, 0.2); 
+        padding: 10px 20px; border-radius: 8px; font-size: 14px; 
+        text-decoration: none; display: flex; align-items: center; gap: 8px; 
+        backdrop-filter: blur(4px); transition: all 0.3s ease;
+    }
+    .back-btn:hover { background: rgba(245, 197, 24, 0.9); color: #000; border-color: #f5c518; }
+    .back-btn svg { width: 18px; height: 18px; }
+    
+    /* When Plyr hides its controls, fade out the back button too */
+    :global(.plyr--hide-controls) ~ .back-btn { opacity: 0; pointer-events: none; }
+
+    .video-container { 
+        width: 100vw; height: 100vh; display: flex; background: #000;
+    }
+
+    /* Force Plyr to take up the full screen without rounded corners */
+    :global(.plyr--video) { width: 100vw; height: 100vh; border-radius: 0; }
+    :global(.plyr__video-wrapper) { width: 100%; height: 100%; }
+    :global(.plyr__video-wrapper video) { object-fit: contain; width: 100%; height: 100%; }
+
+    /* Custom Yellow Theme */
+    :global(.plyr--video .plyr__control--overlaid) { background: rgba(245, 197, 24, 0.9); }
+    :global(.plyr--video .plyr__control--overlaid:hover) { background: #ff9800; }
+    :global(.plyr--full-ui input[type=range]) { color: #f5c518; }
+</style>
+
+<script is:inline src="https://cdn.plyr.io/3.7.8/plyr.js"></script>
+
+<script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const imdbId = urlParams.get('id');
+    
+    if (!imdbId) window.location.href = '/';
+
+    const video = document.getElementById('player');
+    
+    if (video) {
+        const source = document.createElement('source');
+        source.src = `/watch?id=${imdbId}`;
+        source.type = 'video/mp4';
+        video.appendChild(source);
+
+        // @ts-ignore - Tell TypeScript to ignore the CDN import
+        const player = new window.Plyr('#player', {
+            title: 'Movie.Stream Player',
+            keyboard: { focused: true, global: true },
+            controls: [
+                'play-large', 'play', 'progress', 'current-time', 
+                'duration', 'mute', 'volume', 'settings', 'pip', 'fullscreen'
+            ]
+        });
+    }
+</script>
