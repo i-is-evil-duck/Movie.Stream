@@ -3,20 +3,32 @@ services:
     build: .
     container_name: movie-stream
     restart: unless-stopped
-    ports:
-      - "8973:8973"
+    expose:
+      - "8973"
+    # Switch to Named Volumes
     volumes:
-      - ./media:/app/media
-      - ./tmp:/app/tmp
-      - ./logs:/app/logs
+      - media_data:/app/media
+      - tmp_data:/app/tmp
+      - logs_data:/app/logs
     dns:
       - 8.8.8.8
-      - 1.1.1.1
     env_file:
       - .env
-    healthcheck:
-      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8973/health')"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
+
+  nginx:
+    image: nginx:alpine
+    container_name: movie-stream-nginx
+    restart: unless-stopped
+    ports:
+      - "8973:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - media_data:/app/media:ro
+      - tmp_data:/app/tmp:ro
+    depends_on:
+      - movie-stream
+
+volumes:
+  media_data:
+  tmp_data:
+  logs_data:

@@ -1,0 +1,44 @@
+import logging
+import os
+from flask import Flask, jsonify
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from config import LOG_DIR, BASE_DIR
+from routes import routes
+
+# Ensure logs directory exists
+os.makedirs(LOG_DIR, exist_ok=True)
+
+logging.basicConfig(
+    filename=os.path.join(LOG_DIR, "app.log"),
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+)
+
+# Point Flask to the frontend directory
+frontend_dir = os.path.join(BASE_DIR, 'frontend')
+app = Flask(__name__, template_folder=frontend_dir)
+
+# Bridge Flask errors to Gunicorn so they show up in Docker logs
+if __name__ != '__main__':
+    gunicorn_logger = logging.getLogger('gunicorn.error')
+    app.logger.handlers = gunicorn_logger.handlers
+    app.logger.setLevel(gunicorn_logger.level)
+
+limiter = Limiter(
+    key_func=get_remote_address,
+    app=app,
+    storage_uri="memory://",
+    default_limits=["200 per day", "50 per hour"],
+)
+
+app.register_blueprint(routes)
+
+@app.route("/health")
+def health_check():
+    return {"status": "healthy"}
+
+if __name__ == "__main__":
+    host = os.environ.get("HOST", "0.0.0.0")
+    port = int(os.environ.get("PORT", "8973"))
+    app.run(host=host, port=port, threaded=True)

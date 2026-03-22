@@ -1,25 +1,29 @@
-# Use an official Python runtime as the base image
-FROM python:3.10-slim
+# Use Ubuntu 22.04 (which natively uses Python 3.10)
+FROM ubuntu:22.04
 
-# Set environment variables to prevent Python from buffering output
+# Prevent interactive prompts during apt-get
+ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
 
-# Install system dependencies
+# Install system Python, pip, and the pre-compiled libtorrent bindings
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    aria2 \
+    python3 \
+    python3-pip \
+    python3-libtorrent \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Set the working directory in the container
 WORKDIR /app
 
-# Copy the application code into the container
+# Copy the whole project
 COPY . .
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt gunicorn
+# Install the standard Python dependencies
+RUN pip3 install --no-cache-dir -r backend/requirements.txt gunicorn
 
-# Expose the port your app runs on
+# Move into backend to run the server
+WORKDIR /app/backend
+
 EXPOSE 8973
 
-# Run the application with Gunicorn
+# Run the app (using python3/gunicorn)
 CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:8973", "app:app"]
