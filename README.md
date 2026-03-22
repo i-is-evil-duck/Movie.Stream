@@ -5,6 +5,13 @@
 
 Python based movie streaming with yts as source
 
+### ToDo
+
++ add admin console
++ improve ui
++ fix loading mesages
++ debug downloading (dowloading too slow)
+
 ## Views
 
 <img src="https://count.getloli.com/get/@ducky-Movie.Stream?theme=rule34" />
