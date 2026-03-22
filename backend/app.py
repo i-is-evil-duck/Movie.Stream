@@ -3,10 +3,10 @@ import os
 from flask import Flask, jsonify
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from config import LOG_DIR, BASE_DIR
+from config import LOG_DIR
 from routes import routes
+from cleanup import start_cleanup_thread 
 
-# Ensure logs directory exists
 os.makedirs(LOG_DIR, exist_ok=True)
 
 logging.basicConfig(
@@ -15,11 +15,8 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
 )
 
-# Point Flask to the frontend directory
-frontend_dir = os.path.join(BASE_DIR, 'frontend')
-app = Flask(__name__, template_folder=frontend_dir)
+app = Flask(__name__)
 
-# Bridge Flask errors to Gunicorn so they show up in Docker logs
 if __name__ != '__main__':
     gunicorn_logger = logging.getLogger('gunicorn.error')
     app.logger.handlers = gunicorn_logger.handlers
@@ -33,6 +30,8 @@ limiter = Limiter(
 )
 
 app.register_blueprint(routes)
+
+start_cleanup_thread()  # <-- Add this line!
 
 @app.route("/health")
 def health_check():

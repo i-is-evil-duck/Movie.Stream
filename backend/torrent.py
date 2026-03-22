@@ -2,7 +2,7 @@ import os
 import time
 import shutil
 import threading
-import libtorrent as lt
+import libtorrent as lt  # type: ignore
 import logging
 from config import TMP_DIR, MEDIA_DIR
 

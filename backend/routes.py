@@ -3,7 +3,7 @@ import time
 import requests
 import urllib.parse
 import threading
-from flask import Blueprint, request, render_template, abort, jsonify, make_response
+from flask import Blueprint, request, abort, jsonify, make_response
 from config import MEDIA_DIR, TMP_DIR, YTS_API_URL, TRACKERS, TOP_250_URL, MOVIES_CACHE_TTL
 from torrent import STATUS, download_worker
 import logging
@@ -23,7 +23,7 @@ def get_yts_torrent(imdb_id):
         data = r.json().get("data", {}).get("movie", {})
         torrents = data.get("torrents", [])
         if not torrents: return None
-        torrents.sort(key=lambda t: (-({"1080p": 2, "720p": 1}.get(t.get("quality", ""), 0))))
+        torrents.sort(key=lambda t: (-({"2160p": 3, "1080p": 2, "720p": 1}.get(t.get("quality", ""), 0))))
         torrent = torrents[0]
         dn = urllib.parse.quote(data.get("title", "movie"))
         tr = "&tr=".join(TRACKERS)
@@ -32,17 +32,14 @@ def get_yts_torrent(imdb_id):
         return None
 
 def find_movie_file(imdb_id):
-    """Checks both completed media folder and temporary download folder"""
     media_dir_path = os.path.join(MEDIA_DIR, imdb_id)
     tmp_dir_path = os.path.join(TMP_DIR, imdb_id)
     
-    # Check completed folder
     if os.path.exists(media_dir_path):
         for f in os.listdir(media_dir_path):
             if f.endswith(('.mp4', '.mkv')):
                 return 'media', os.path.join(imdb_id, f)
                 
-    # Check temporary folder
     if os.path.exists(tmp_dir_path):
         for root, _, files in os.walk(tmp_dir_path):
             for f in files:
@@ -82,39 +79,37 @@ def get_top_movies(force_refresh=False):
         logger.error(f"Error fetching top movies: {e}")
         return MOVIES_CACHE["data"] or []
 
-@routes.route("/")
-def index():
-    imdb_id = request.args.get("id")
-    if imdb_id and is_valid_imdb_id(imdb_id):
-        folder, filepath = find_movie_file(imdb_id)
-        if folder:
-            return render_template("player.html", imdb_id=imdb_id, movie_title=imdb_id)
-
-        if imdb_id not in STATUS or STATUS[imdb_id] == 'error':
-            torrent_url = get_yts_torrent(imdb_id)
-            if not torrent_url:
-                return render_template("download.html", imdb_id=imdb_id)
-            threading.Thread(target=download_worker, args=(imdb_id, torrent_url), daemon=True).start()
-
-        return render_template("download.html", imdb_id=imdb_id)
-    return render_template("index.html")
-
 @routes.route("/api/movies")
 def api_movies():
     force = request.args.get("refresh", "").lower() == "true"
     movies = get_top_movies(force_refresh=force)
     return jsonify({"movies": movies, "count": len(movies)})
 
-@routes.route("/player")
-def player():
+@routes.route("/status")
+def check_status():
     imdb_id = request.args.get("id")
+    if not imdb_id or not is_valid_imdb_id(imdb_id):
+        return jsonify({"id": imdb_id, "status": "error: invalid id"})
+
+    # If the file already exists, immediately tell Astro we are done
     folder, filepath = find_movie_file(imdb_id)
-    
-    # If file isn't ready yet, trap them back on the loading page
-    if not folder:
-        return render_template("download.html", imdb_id=imdb_id)
+    if folder:
+        STATUS[imdb_id] = "done"
+        return jsonify({"id": imdb_id, "status": "done"})
+
+    status = STATUS.get(imdb_id, "not found")
+
+    # Auto-start download if it hasn't started yet
+    if status in ("not found", "error"):
+        torrent_url = get_yts_torrent(imdb_id)
+        if not torrent_url:
+            return jsonify({"id": imdb_id, "status": "error: torrent not found"})
         
-    return render_template("player.html", imdb_id=imdb_id, movie_title=imdb_id)
+        STATUS[imdb_id] = "queued"
+        threading.Thread(target=download_worker, args=(imdb_id, torrent_url), daemon=True).start()
+        status = "queued"
+
+    return jsonify({"id": imdb_id, "status": status})
 
 @routes.route("/watch")
 def watch():
@@ -126,8 +121,6 @@ def watch():
 
     response = make_response("")
     response.headers['Content-Type'] = 'video/mp4'
-    
-    # URL-encode the filepath to safely handle spaces and brackets
     safe_filepath = urllib.parse.quote(filepath)
     
     if folder == 'media':
@@ -136,10 +129,3 @@ def watch():
         response.headers['X-Accel-Redirect'] = f"/tmp/{safe_filepath}"
         
     return response
-
-# This is the function that went missing! 
-@routes.route("/status")
-def check_status():
-    imdb_id = request.args.get("id")
-    status = STATUS.get(imdb_id, "not found")
-    return {"id": imdb_id, "status": status}
